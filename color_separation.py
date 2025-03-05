@@ -555,6 +555,203 @@ def change_layer_color(layer, new_color, bg_color=(255, 255, 255)):
     
     return new_layer
 
+# Additional layer manipulation functions
+
+def invert_layer(layer, bg_color=(255, 255, 255)):
+    """
+    Invert a layer's mask while preserving its color.
+    
+    Args:
+        layer: Layer to invert (BGR format)
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Inverted layer
+    """
+    # Extract the mask by checking which pixels are not background color
+    mask = np.any(layer != bg_color, axis=2).astype(np.uint8) * 255
+    
+    # Invert the mask
+    inverted_mask = cv2.bitwise_not(mask)
+    
+    # Get the original color (assuming uniform color)
+    non_bg_pixels = layer[layer != bg_color.reshape(1, 1, 3)]
+    if len(non_bg_pixels) > 0:
+        color = non_bg_pixels.reshape(-1, 3)[0]
+    else:
+        # If no foreground pixels, use a default color
+        color = (0, 0, 0)
+    
+    # Create a new layer with the inverted mask and original color
+    inverted_layer = create_color_layer(layer, inverted_mask, color, bg_color)
+    
+    return inverted_layer
+
+def erode_dilate_layer(layer, operation='erode', kernel_size=3, iterations=1, bg_color=(255, 255, 255)):
+    """
+    Apply erosion or dilation to a layer's mask.
+    
+    Args:
+        layer: Layer to modify (BGR format)
+        operation: 'erode' or 'dilate'
+        kernel_size: Size of the kernel for morphological operation
+        iterations: Number of iterations to apply the operation
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Modified layer
+    """
+    # Extract the mask
+    mask = np.any(layer != bg_color, axis=2).astype(np.uint8) * 255
+    
+    # Create kernel
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    
+    # Apply operation
+    if operation == 'erode':
+        new_mask = cv2.erode(mask, kernel, iterations=iterations)
+    elif operation == 'dilate':
+        new_mask = cv2.dilate(mask, kernel, iterations=iterations)
+    else:
+        return layer  # Return original if invalid operation
+    
+    # Get the original color
+    non_bg_pixels = layer[layer != bg_color.reshape(1, 1, 3)]
+    if len(non_bg_pixels) > 0:
+        color = non_bg_pixels.reshape(-1, 3)[0]
+    else:
+        color = (0, 0, 0)
+    
+    # Create a new layer with the modified mask
+    modified_layer = create_color_layer(layer, new_mask, color, bg_color)
+    
+    return modified_layer
+
+def transform_layer(layer, operation='rotate90', bg_color=(255, 255, 255)):
+    """
+    Apply geometric transformations to a layer.
+    
+    Args:
+        layer: Layer to transform (BGR format)
+        operation: One of 'rotate90', 'rotate180', 'rotate270', 'flip_h', 'flip_v'
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Transformed layer
+    """
+    if operation == 'rotate90':
+        transformed = cv2.rotate(layer, cv2.ROTATE_90_CLOCKWISE)
+    elif operation == 'rotate180':
+        transformed = cv2.rotate(layer, cv2.ROTATE_180)
+    elif operation == 'rotate270':
+        transformed = cv2.rotate(layer, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    elif operation == 'flip_h':
+        transformed = cv2.flip(layer, 1)  # 1 = horizontal flip
+    elif operation == 'flip_v':
+        transformed = cv2.flip(layer, 0)  # 0 = vertical flip
+    else:
+        return layer  # Return original if invalid operation
+    
+    return transformed
+
+def adjust_layer_opacity(layer, opacity=0.5, bg_color=(255, 255, 255)):
+    """
+    Adjust the opacity of a layer.
+    
+    Args:
+        layer: Layer to modify (BGR format)
+        opacity: Opacity level from 0.0 to 1.0
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Layer with adjusted opacity
+    """
+    # Create a copy of the layer
+    result = layer.copy()
+    
+    # Extract the mask (where pixels are not background)
+    mask = np.any(layer != bg_color, axis=2)
+    
+    # For each foreground pixel, blend with background based on opacity
+    for i in range(3):  # For each channel
+        result[:,:,i] = np.where(
+            mask,
+            (layer[:,:,i] * opacity + bg_color[i] * (1 - opacity)).astype(np.uint8),
+            bg_color[i]
+        )
+    
+    return result
+
+def apply_blur_sharpen(layer, operation='blur', amount=5, bg_color=(255, 255, 255)):
+    """
+    Apply blur or sharpen filter to a layer.
+    
+    Args:
+        layer: Layer to modify (BGR format)
+        operation: 'blur' or 'sharpen'
+        amount: Intensity of the effect
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Modified layer
+    """
+    # Extract the mask
+    mask = np.any(layer != bg_color, axis=2).astype(np.uint8) * 255
+    
+    # Get the foreground color
+    non_bg_pixels = layer[layer != bg_color.reshape(1, 1, 3)]
+    if len(non_bg_pixels) > 0:
+        color = non_bg_pixels.reshape(-1, 3)[0]
+    else:
+        color = (0, 0, 0)
+    
+    # Apply the selected operation to the mask
+    if operation == 'blur':
+        # Apply Gaussian blur
+        modified_mask = cv2.GaussianBlur(mask, (amount*2+1, amount*2+1), 0)
+    elif operation == 'sharpen':
+        # Apply unsharp mask technique for sharpening
+        gaussian = cv2.GaussianBlur(mask, (5, 5), 0)
+        modified_mask = cv2.addWeighted(mask, 1.0 + amount/10.0, gaussian, -amount/10.0, 0)
+        modified_mask = np.clip(modified_mask, 0, 255).astype(np.uint8)
+    else:
+        return layer  # Return original if invalid operation
+    
+    # Create a new layer with the modified mask
+    modified_layer = create_color_layer(layer, modified_mask, color, bg_color)
+    
+    return modified_layer
+
+def apply_threshold(layer, threshold_value=127, bg_color=(255, 255, 255)):
+    """
+    Apply threshold to a layer to make mask more binary.
+    
+    Args:
+        layer: Layer to modify (BGR format)
+        threshold_value: Threshold value (0-255)
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Modified layer with thresholded mask
+    """
+    # Extract the mask
+    mask = np.any(layer != bg_color, axis=2).astype(np.uint8) * 255
+    
+    # Apply threshold
+    _, thresholded_mask = cv2.threshold(mask, threshold_value, 255, cv2.THRESH_BINARY)
+    
+    # Get the foreground color
+    non_bg_pixels = layer[layer != bg_color.reshape(1, 1, 3)]
+    if len(non_bg_pixels) > 0:
+        color = non_bg_pixels.reshape(-1, 3)[0]
+    else:
+        color = (0, 0, 0)
+    
+    # Create a new layer with the thresholded mask
+    modified_layer = create_color_layer(layer, thresholded_mask, color, bg_color)
+    
+    return modified_layer
+
 # Pantone TPX and TPG color mappings (limited set, can be expanded)
 # Format: 'CODE': (R, G, B)
 PANTONE_TPX = {

@@ -10,6 +10,8 @@ import tempfile
 import os
 import zipfile
 from collections import Counter
+import pantone_colors as pantone
+from pantone_tab import pantone_extraction_tab
 
 # Set page configuration
 st.set_page_config(
@@ -98,10 +100,7 @@ from color_separation import (
 )
 
 # Import Pantone color codes
-from pantone_colors import get_all_pantone_codes
-
-# Get Pantone color codes for display
-pantone_codes = get_all_pantone_codes()
+pantone_codes = pantone.get_all_pantone_codes()
 
 # Sidebar for controls
 with st.sidebar:
@@ -613,7 +612,7 @@ This package contains color-separated layers for textile printing.
                     
                     if color_input_method == "Color Picker":
                         custom_color_hex = st.color_picker("Select color", "#FF0000")
-                        custom_color = get_color_from_code(custom_color_hex)
+                        custom_color = pantone.get_color_from_code(custom_color_hex)
                     
                     elif color_input_method == "RGB Value":
                         col1, col2, col3 = st.columns(3)
@@ -627,7 +626,7 @@ This package contains color-separated layers for textile printing.
                     
                     elif color_input_method == "Hex Code":
                         hex_val = st.text_input("Hex Code (e.g., #FF0000)", "#FF0000")
-                        custom_color = get_color_from_code(hex_val)
+                        custom_color = pantone.get_color_from_code(hex_val)
                     
                     elif color_input_method == "Pantone TPX/TPG":
                         pantone_code_type = st.selectbox(
@@ -638,7 +637,7 @@ This package contains color-separated layers for textile printing.
                         
                         if pantone_code_type == "TPX":
                             # Create a dictionary of TPX codes and names
-                            tpx_codes = {code_info['code']: name for name, code_info in pantone_colors.TPX_COLORS.items()}
+                            tpx_codes = {code_info['code']: name for name, code_info in pantone.TPX_COLORS.items()}
                             pantone_tpx_code = st.selectbox(
                                 "Select Pantone TPX code",
                                 list(tpx_codes.keys()),
@@ -646,12 +645,12 @@ This package contains color-separated layers for textile printing.
                                 key="pantone_tpx_code"
                             )
                             # Get color from TPX database
-                            selected_color = pantone_colors.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
+                            selected_color = pantone.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
                             custom_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
                             color_source = "pantone_tpx"
                         elif pantone_code_type == "TPG":
                             # Create a dictionary of TPG codes and names
-                            tpg_codes = {code_info['code']: name for name, code_info in pantone_colors.TPG_COLORS.items()}
+                            tpg_codes = {code_info['code']: name for name, code_info in pantone.TPG_COLORS.items()}
                             pantone_tpg_code = st.selectbox(
                                 "Select Pantone TPG code",
                                 list(tpg_codes.keys()),
@@ -659,7 +658,7 @@ This package contains color-separated layers for textile printing.
                                 key="pantone_tpg_code"
                             )
                             # Get color from TPG database
-                            selected_color = pantone_colors.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
+                            selected_color = pantone.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
                             custom_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
                             color_source = "pantone_tpg"
                 
@@ -762,7 +761,7 @@ This package contains color-separated layers for textile printing.
                         current_color[2], current_color[1], current_color[0]
                     )
                     new_color_hex = st.color_picker("Select new color", current_hex)
-                    new_color = get_color_from_code(new_color_hex)
+                    new_color = pantone.get_color_from_code(new_color_hex)
                     color_source = "color_picker"
                 
                 elif color_input_method == "RGB Value":
@@ -785,7 +784,7 @@ This package contains color-separated layers for textile printing.
                         current_color[2], current_color[1], current_color[0]
                     )
                     hex_val = st.text_input("Hex Code (e.g., #FF0000)", current_hex)
-                    new_color = get_color_from_code(hex_val)
+                    new_color = pantone.get_color_from_code(hex_val)
                     color_source = "hex_code"
                 
                 elif color_input_method == "Pantone TPX/TPG":
@@ -797,7 +796,7 @@ This package contains color-separated layers for textile printing.
                     
                     if pantone_code_type == "TPX":
                         # Create a dictionary of TPX codes and names
-                        tpx_codes = {code_info['code']: name for name, code_info in pantone_colors.TPX_COLORS.items()}
+                        tpx_codes = {code_info['code']: name for name, code_info in pantone.TPX_COLORS.items()}
                         pantone_tpx_code = st.selectbox(
                             "Select Pantone TPX code",
                             list(tpx_codes.keys()),
@@ -805,12 +804,12 @@ This package contains color-separated layers for textile printing.
                             key="pantone_tpx_code"
                         )
                         # Get color from TPX database
-                        selected_color = pantone_colors.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
+                        selected_color = pantone.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
                         new_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
                         color_source = "pantone_tpx"
                     elif pantone_code_type == "TPG":
                         # Create a dictionary of TPG codes and names
-                        tpg_codes = {code_info['code']: name for name, code_info in pantone_colors.TPG_COLORS.items()}
+                        tpg_codes = {code_info['code']: name for name, code_info in pantone.TPG_COLORS.items()}
                         pantone_tpg_code = st.selectbox(
                             "Select Pantone TPG code",
                             list(tpg_codes.keys()),
@@ -818,7 +817,7 @@ This package contains color-separated layers for textile printing.
                             key="pantone_tpg_code"
                         )
                         # Get color from TPG database
-                        selected_color = pantone_colors.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
+                        selected_color = pantone.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
                         new_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
                         color_source = "pantone_tpg"
                 
@@ -875,13 +874,13 @@ This package contains color-separated layers for textile printing.
                         color_description = f"#{hex_color}"
                         if color_source == "pantone_tpx" and pantone_tpx_code:
                             # Get the Pantone TPX name from the code
-                            for name, code_info in pantone_colors.TPX_COLORS.items():
+                            for name, code_info in pantone.TPX_COLORS.items():
                                 if code_info['code'] == pantone_tpx_code:
                                     color_description = f"Pantone TPX {pantone_tpx_code} ({name})"
                                     break
                         elif color_source == "pantone_tpg" and pantone_tpg_code:
                             # Get the Pantone TPG name from the code
-                            for name, code_info in pantone_colors.TPG_COLORS.items():
+                            for name, code_info in pantone.TPG_COLORS.items():
                                 if code_info['code'] == pantone_tpg_code:
                                     color_description = f"Pantone TPG {pantone_tpg_code} ({name})"
                                     break
