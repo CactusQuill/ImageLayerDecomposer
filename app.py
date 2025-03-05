@@ -288,30 +288,135 @@ if uploaded_file is not None:
         
         # Create a combined preview
         if len(color_layers) > 0:
-            st.markdown("<h3>Combined Preview</h3>", unsafe_allow_html=True)
-            # Create a combined image 
+            st.markdown("""
+            <div style='background-color: #f0f8ff; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;'>
+                <h3>Combined Preview</h3>
+                <p>Control the visual order of layers in your preview. Use the Layer Order & Visibility Settings below to:</p>
+                <ul>
+                    <li>Change the stacking order of layers (higher position numbers appear on top)</li>
+                    <li>Toggle layer visibility on/off to preview different combinations</li>
+                    <li>Save your current layer arrangement for further editing</li>
+                </ul>
+                <p>All downloads will respect your layer order and visibility settings.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Add an option to reorder layers
+            with st.expander("Layer Order & Visibility Settings"):
+                col1, col2 = st.columns([4, 1])
+                
+                with col1:
+                    st.write("Control the stacking order and visibility of your layers:")
+                
+                with col2:
+                    # Add a button to reset all layer visibility
+                    if st.button("Show All Layers"):
+                        st.session_state.layer_visibility = [True] * len(color_layers)
+                        st.experimental_rerun()
+                
+                # Create a list of layer indices and their names for sorting
+                layer_items = [f"Layer {i+1} - {color_info[i]['percentage']:.1f}% - #{color_info[i]['color'][2]:02x}{color_info[i]['color'][1]:02x}{color_info[i]['color'][0]:02x}" 
+                              for i in range(len(color_layers))]
+                
+                # Store the current order if not already in session state
+                if 'layer_order' not in st.session_state:
+                    st.session_state.layer_order = list(range(len(color_layers)))
+                # Update layer_order if number of layers changed
+                elif len(st.session_state.layer_order) != len(color_layers):
+                    st.session_state.layer_order = list(range(len(color_layers)))
+                
+                # Initialize layer visibility if not in session state
+                if 'layer_visibility' not in st.session_state:
+                    st.session_state.layer_visibility = [True] * len(color_layers)
+                # Update visibility if number of layers changed
+                elif len(st.session_state.layer_visibility) != len(color_layers):
+                    st.session_state.layer_visibility = [True] * len(color_layers)
+                
+                # Create columns for each layer to allow reordering and toggling visibility
+                for i in range(len(color_layers)):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        order_value = st.number_input(
+                            f"Layer {i+1} position",
+                            min_value=1,
+                            max_value=len(color_layers),
+                            value=st.session_state.layer_order[i] + 1,
+                            key=f"layer_order_{i}"
+                        )
+                        st.session_state.layer_order[i] = order_value - 1
+                    
+                    with col2:
+                        st.session_state.layer_visibility[i] = st.checkbox(
+                            f"Visible",
+                            value=st.session_state.layer_visibility[i],
+                            key=f"layer_visible_{i}"
+                        )
+                    
+                    # Display a color swatch for this layer
+                    hex_color = "#{:02x}{:02x}{:02x}".format(
+                        color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]  # BGR to RGB
+                    )
+                    st.markdown(
+                        f"<div><span class='color-chip' style='background-color: {hex_color}; width: 100%; height: 10px;'></span></div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown("---")
+            
+            # Create a combined image based on the user-defined order
             combined = np.zeros_like(img_cv)
-            for layer in color_layers:
-                # Take non-black parts of each layer
-                mask = cv2.cvtColor(layer, cv2.COLOR_BGR2GRAY) > 0
-                combined[mask] = layer[mask]
+            
+            # Apply layers in reverse order (so that last layer is on top)
+            for idx in reversed(st.session_state.layer_order):
+                if st.session_state.layer_visibility[idx]:
+                    layer = color_layers[idx]
+                    # Take non-black parts of each layer
+                    mask = cv2.cvtColor(layer, cv2.COLOR_BGR2GRAY) > 0
+                    combined[mask] = layer[mask]
             
             # Convert combined from BGR to RGB for display
             combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
-            st.image(combined_rgb, caption="Combined layers", use_column_width=True)
+            
+            # Count visible layers
+            visible_layers = sum(st.session_state.layer_visibility)
+            total_layers = len(color_layers)
+            
+            # Create a caption that shows layer order status
+            if visible_layers == total_layers:
+                caption = f"Combined preview of all {total_layers} layers with custom ordering"
+            else:
+                caption = f"Combined preview of {visible_layers}/{total_layers} visible layers with custom ordering"
+                
+            st.image(combined_rgb, caption=caption, use_column_width=True)
             
             # Download button for combined preview
             combined_rgb_pil = Image.fromarray(combined_rgb)
             combined_bytes = io.BytesIO()
             combined_rgb_pil.save(combined_bytes, format="PNG")
             
-            st.download_button(
-                label="Download Combined Preview",
-                data=combined_bytes.getvalue(),
-                file_name="combined_preview.png",
-                mime="image/png",
-                key="download_combined_preview"
-            )
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="Download Combined Preview",
+                    data=combined_bytes.getvalue(),
+                    file_name="combined_preview.png",
+                    mime="image/png",
+                    key="download_combined_preview"
+                )
+            
+            with col2:
+                # Create a button to save the layer order
+                if st.button("Save Current Layer Order", key="save_layer_order"):
+                    if 'custom_layers' not in st.session_state:
+                        st.session_state.custom_layers = []
+                    
+                    # Add the ordered combined image to custom layers
+                    st.session_state.custom_layers.append({
+                        'layer': combined,
+                        'name': f"Combined with custom order"
+                    })
+                    
+                    st.success("Current layer order saved to Manipulated Layers Gallery!")
         
         # Download options
         st.markdown("""
@@ -328,13 +433,28 @@ if uploaded_file is not None:
                 with st.spinner("Preparing files for download..."):
                     # Create a temporary directory
                     with tempfile.TemporaryDirectory() as tmpdirname:
-                        # Save each layer
+                        # Determine if we have an ordered layer list
+                        has_ordered_layers = 'layer_order' in st.session_state and len(st.session_state.layer_order) == len(color_layers)
+                        has_visibility = 'layer_visibility' in st.session_state and len(st.session_state.layer_visibility) == len(color_layers)
+                        
+                        # Save each layer with order information
                         layer_files = []
                         for i, layer in enumerate(color_layers):
+                            # Get the layer's position in the stack (if ordering is active)
+                            position = i
+                            if has_ordered_layers:
+                                # Find this layer's position in the ordered list
+                                position = st.session_state.layer_order[i]
+                                
+                            # Skip layers that are set to be invisible
+                            if has_visibility and not st.session_state.layer_visibility[i]:
+                                continue
+                            
                             hex_color = "{:02x}{:02x}{:02x}".format(
                                 color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
                             )
-                            layer_filename = f"layer_{i+1}_{hex_color}.png"
+                            # Include position in filename
+                            layer_filename = f"position{position+1:02d}_layer_{i+1}_{hex_color}.png"
                             layer_path = os.path.join(tmpdirname, layer_filename)
                             
                             # Convert BGR to RGB before saving
@@ -346,12 +466,45 @@ if uploaded_file is not None:
                         combined_path = os.path.join(tmpdirname, "combined.png")
                         Image.fromarray(combined_rgb).save(combined_path)
                         
+                        # Create a README text file explaining the layers
+                        readme_content = """# ColorSep Exported Layers
+
+This package contains color-separated layers for textile printing.
+
+## File Naming Convention
+- Files are named with the following pattern: position{XX}_layer_{Y}_{color}.png
+- Position: The position in the stacking order (01 is the bottom layer, higher numbers are on top)
+- Layer: The original layer number from the extraction
+- Color: The hex color code of the layer
+
+## Contents
+- Combined image: The combined result of all layers according to their stacking order
+"""
+                        # Add information about each layer to the README
+                        readme_content += "\n\n## Layer Details\n"
+                        for i, layer in enumerate(color_layers):
+                            position = i
+                            if 'layer_order' in st.session_state and len(st.session_state.layer_order) == len(color_layers):
+                                position = st.session_state.layer_order[i]
+                            
+                            hex_color = "{:02x}{:02x}{:02x}".format(
+                                color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
+                            )
+                            
+                            readme_content += f"- Layer {i+1}: Position {position+1}, Coverage {color_info[i]['percentage']:.1f}%, Color #{hex_color}\n"
+                        
+                        # Save README file
+                        readme_path = os.path.join(tmpdirname, "README.txt")
+                        with open(readme_path, 'w') as f:
+                            f.write(readme_content)
+                        
                         # Create a zip file
                         zip_path = os.path.join(tmpdirname, "color_layers.zip")
                         with zipfile.ZipFile(zip_path, 'w') as zipf:
                             for file in layer_files:
                                 zipf.write(file, os.path.basename(file))
                             zipf.write(combined_path, os.path.basename(combined_path))
+                            zipf.write(readme_path, os.path.basename(readme_path))
                         
                         # Read the zip file
                         with open(zip_path, "rb") as f:
@@ -371,9 +524,23 @@ if uploaded_file is not None:
                 with st.spinner("Preparing mask files for download..."):
                     # Create a temporary directory
                     with tempfile.TemporaryDirectory() as tmpdirname:
+                        # Determine if we have an ordered layer list
+                        has_ordered_layers = 'layer_order' in st.session_state and len(st.session_state.layer_order) == len(color_layers)
+                        has_visibility = 'layer_visibility' in st.session_state and len(st.session_state.layer_visibility) == len(color_layers)
+                        
                         # Save each layer as a black and white mask
                         mask_files = []
                         for i, layer in enumerate(color_layers):
+                            # Get the layer's position in the stack (if ordering is active)
+                            position = i
+                            if has_ordered_layers:
+                                # Find this layer's position in the ordered list
+                                position = st.session_state.layer_order[i]
+                                
+                            # Skip layers that are set to be invisible
+                            if has_visibility and not st.session_state.layer_visibility[i]:
+                                continue
+                            
                             # Create mask (white foreground, black background)
                             mask = np.zeros((layer.shape[0], layer.shape[1]), dtype=np.uint8)
                             is_fg = np.logical_not(np.all(layer == bg_color_rgb, axis=2))
@@ -382,7 +549,8 @@ if uploaded_file is not None:
                             hex_color = "{:02x}{:02x}{:02x}".format(
                                 color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
                             )
-                            mask_filename = f"mask_{i+1}_{hex_color}.png"
+                            # Include position in filename
+                            mask_filename = f"position{position+1:02d}_mask_{i+1}_{hex_color}.png"
                             mask_path = os.path.join(tmpdirname, mask_filename)
                             
                             # Save the mask

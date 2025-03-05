@@ -33,6 +33,8 @@ ColorSep is an advanced color separation tool specifically designed for textile 
   - Change colors of layers with professional color codes
   - Support for Pantone TPX and TPG color systems
   - Exact color extraction for pixel-perfect separation
+  - Control layer order and visibility for complex designs
+  - Preview different layer combinations with toggling options
 
 ## Installation
 
@@ -54,7 +56,11 @@ streamlit run app.py
 2. Upload an image using the sidebar file uploader
 3. Choose a color separation method and adjust parameters
 4. View the extracted color layers
-5. Download individual layers or all layers as a zip file
+5. Use the Layer Order & Visibility Settings to:
+   - Change the stacking order of layers
+   - Toggle layer visibility on/off
+   - Preview different layer combinations
+6. Download individual layers or all layers as a zip file with order preserved
 
 ## Requirements
 
