@@ -1,0 +1,16 @@
+[theme]
+# Base colors
+primaryColor = "#0056b3"  # Primary accent color (buttons, etc)
+backgroundColor = "#ffffff"  # Main background
+secondaryBackgroundColor = "#f5f5f5"  # Sidebar background
+textColor = "#000000"  # Main text color
+font = "sans serif"
+
+[server]
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
+
+[global]
+disableWatchdogWarning = true

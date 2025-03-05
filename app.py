@@ -15,36 +15,67 @@ from collections import Counter
 st.set_page_config(
     page_title="ColorSep - Textile Color Separation Tool",
     page_icon="🎨",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Set theme settings - light theme for better text visibility
+st.markdown("""
+    <script>
+        var elements = window.parent.document.querySelectorAll('.stApp')
+        elements[0].style.backgroundColor = '#ffffff';
+    </script>
+    """, unsafe_allow_html=True)
 
 # Custom CSS
 st.markdown("""
 <style>
     .main-header {
         font-size: 2.5rem;
-        color: #1E88E5;
+        color: #0056b3;
         text-align: center;
         margin-bottom: 20px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
     .sub-header {
         font-size: 1.5rem;
-        color: #424242;
+        color: #212121;
         margin-bottom: 10px;
+        font-weight: 600;
     }
     .info-text {
-        font-size: 1rem;
-        color: #616161;
+        font-size: 1.1rem;
+        color: #000000;
+        line-height: 1.5;
     }
     .stButton button {
-        background-color: #1E88E5;
+        background-color: #0056b3;
         color: white;
+        font-weight: bold;
     }
     .color-chip {
         display: inline-block;
         width: 20px;
         height: 20px;
         margin-right: 5px;
+        border: 1px solid #000;
+    }
+    /* Improve general text visibility */
+    .stMarkdown, .stText, p, h1, h2, h3, h4, h5, label, .stSelectbox, .stSlider {
+        color: #000000 !important;
+        font-weight: 500 !important;
+    }
+    /* Improve contrast for selectbox and slider labels */
+    .stSelectbox label, .stSlider label {
+        color: #000000 !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
+    }
+    /* Add background contrast to important sections */
+    .stExpander {
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 5px;
+        padding: 10px;
         border: 1px solid #ddd;
     }
 </style>
@@ -93,7 +124,7 @@ with st.sidebar:
         
         # Parameters for Exact color extraction
         if method == "Exact color extraction":
-            max_colors = st.slider("Maximum number of colors to extract", 5, 200, 50)
+            max_colors = st.slider("Maximum number of colors to extract", 5, 15, 10)
             st.warning("Note: Images with gradients or noise may have many unique colors. This method creates one layer per unique color.")
         
         # Parameters for K-means
@@ -226,6 +257,23 @@ if uploaded_file is not None:
                 # Convert layer from BGR to RGB for display
                 layer_rgb = cv2.cvtColor(layer, cv2.COLOR_BGR2RGB)
                 st.image(layer_rgb, caption=f"Layer {i+1}", use_column_width=True)
+                
+                # Add download button for this individual layer
+                layer_rgb_pil = Image.fromarray(layer_rgb)
+                layer_bytes = io.BytesIO()
+                layer_rgb_pil.save(layer_bytes, format="PNG")
+                
+                hex_color = "{:02x}{:02x}{:02x}".format(
+                    info['color'][2], info['color'][1], info['color'][0]  # BGR to RGB
+                )
+                
+                st.download_button(
+                    label=f"Download Layer {i+1}",
+                    data=layer_bytes.getvalue(),
+                    file_name=f"layer_{i+1}_{hex_color}.png",
+                    mime="image/png",
+                    key=f"download_layer_{i}"
+                )
             
             with col_right:
                 hex_color = "#{:02x}{:02x}{:02x}".format(
@@ -251,53 +299,122 @@ if uploaded_file is not None:
             # Convert combined from BGR to RGB for display
             combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
             st.image(combined_rgb, caption="Combined layers", use_column_width=True)
+            
+            # Download button for combined preview
+            combined_rgb_pil = Image.fromarray(combined_rgb)
+            combined_bytes = io.BytesIO()
+            combined_rgb_pil.save(combined_bytes, format="PNG")
+            
+            st.download_button(
+                label="Download Combined Preview",
+                data=combined_bytes.getvalue(),
+                file_name="combined_preview.png",
+                mime="image/png",
+                key="download_combined_preview"
+            )
         
         # Download options
-        st.markdown("<h3>Download Options</h3>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style='background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;'>
+            <h3>Download Options</h3>
+            <p>Choose from different download formats to suit your textile printing workflow.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if st.button("Prepare Download Package"):
-            with st.spinner("Preparing files for download..."):
-                # Create a temporary directory
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    # Save each layer
-                    layer_files = []
-                    for i, layer in enumerate(color_layers):
-                        hex_color = "#{:02x}{:02x}{:02x}".format(
-                            color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
-                        )
-                        layer_filename = f"layer_{i+1}_{hex_color}.png"
-                        layer_path = os.path.join(tmpdirname, layer_filename)
+        download_col1, download_col2 = st.columns(2)
+        
+        with download_col1:
+            if st.button("Prepare All Layers Package"):
+                with st.spinner("Preparing files for download..."):
+                    # Create a temporary directory
+                    with tempfile.TemporaryDirectory() as tmpdirname:
+                        # Save each layer
+                        layer_files = []
+                        for i, layer in enumerate(color_layers):
+                            hex_color = "{:02x}{:02x}{:02x}".format(
+                                color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
+                            )
+                            layer_filename = f"layer_{i+1}_{hex_color}.png"
+                            layer_path = os.path.join(tmpdirname, layer_filename)
+                            
+                            # Convert BGR to RGB before saving
+                            layer_rgb = cv2.cvtColor(layer, cv2.COLOR_BGR2RGB)
+                            Image.fromarray(layer_rgb).save(layer_path)
+                            layer_files.append(layer_path)
                         
-                        # Convert BGR to RGB before saving
-                        layer_rgb = cv2.cvtColor(layer, cv2.COLOR_BGR2RGB)
-                        Image.fromarray(layer_rgb).save(layer_path)
-                        layer_files.append(layer_path)
-                    
-                    # Save combined image
-                    combined_path = os.path.join(tmpdirname, "combined.png")
-                    Image.fromarray(combined_rgb).save(combined_path)
-                    
-                    # Create a zip file
-                    zip_path = os.path.join(tmpdirname, "color_layers.zip")
-                    with zipfile.ZipFile(zip_path, 'w') as zipf:
-                        for file in layer_files:
-                            zipf.write(file, os.path.basename(file))
-                        zipf.write(combined_path, os.path.basename(combined_path))
-                    
-                    # Read the zip file
-                    with open(zip_path, "rb") as f:
-                        zip_data = f.read()
-                    
-                    # Provide download link
-                    st.download_button(
-                        label="Download all layers",
-                        data=zip_data,
-                        file_name="color_layers.zip",
-                        mime="application/zip"
-                    )
+                        # Save combined image
+                        combined_path = os.path.join(tmpdirname, "combined.png")
+                        Image.fromarray(combined_rgb).save(combined_path)
+                        
+                        # Create a zip file
+                        zip_path = os.path.join(tmpdirname, "color_layers.zip")
+                        with zipfile.ZipFile(zip_path, 'w') as zipf:
+                            for file in layer_files:
+                                zipf.write(file, os.path.basename(file))
+                            zipf.write(combined_path, os.path.basename(combined_path))
+                        
+                        # Read the zip file
+                        with open(zip_path, "rb") as f:
+                            zip_data = f.read()
+                        
+                        # Provide download link
+                        st.download_button(
+                            label="Download All Layers",
+                            data=zip_data,
+                            file_name="color_layers.zip",
+                            mime="application/zip",
+                            key="download_all_zip"
+                        )
+                        
+        with download_col2:
+            if st.button("Save as PNG Masks"):
+                with st.spinner("Preparing mask files for download..."):
+                    # Create a temporary directory
+                    with tempfile.TemporaryDirectory() as tmpdirname:
+                        # Save each layer as a black and white mask
+                        mask_files = []
+                        for i, layer in enumerate(color_layers):
+                            # Create mask (white foreground, black background)
+                            mask = np.zeros((layer.shape[0], layer.shape[1]), dtype=np.uint8)
+                            is_fg = np.logical_not(np.all(layer == bg_color_rgb, axis=2))
+                            mask[is_fg] = 255
+                            
+                            hex_color = "{:02x}{:02x}{:02x}".format(
+                                color_info[i]['color'][2], color_info[i]['color'][1], color_info[i]['color'][0]
+                            )
+                            mask_filename = f"mask_{i+1}_{hex_color}.png"
+                            mask_path = os.path.join(tmpdirname, mask_filename)
+                            
+                            # Save the mask
+                            Image.fromarray(mask).save(mask_path)
+                            mask_files.append(mask_path)
+                        
+                        # Create a zip file
+                        zip_path = os.path.join(tmpdirname, "mask_layers.zip")
+                        with zipfile.ZipFile(zip_path, 'w') as zipf:
+                            for file in mask_files:
+                                zipf.write(file, os.path.basename(file))
+                        
+                        # Read the zip file
+                        with open(zip_path, "rb") as f:
+                            zip_data = f.read()
+                        
+                        # Provide download link
+                        st.download_button(
+                            label="Download Mask Layers",
+                            data=zip_data,
+                            file_name="mask_layers.zip",
+                            mime="application/zip",
+                            key="download_masks_zip"
+                        )
         
         # Layer manipulation tools
-        st.markdown("<h3>Layer Manipulation Tools</h3>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style='background-color: #f2f8f3; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;'>
+            <h3>Layer Manipulation Tools</h3>
+            <p>Combine layers or change their colors to achieve the perfect separation for your textile printing project.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         with st.expander("Combine Layers"):
             if len(color_layers) >= 2:
@@ -345,12 +462,38 @@ if uploaded_file is not None:
                         custom_color = get_color_from_code(hex_val)
                     
                     elif color_input_method == "Pantone TPX/TPG":
-                        pantone_code = st.selectbox(
-                            "Select Pantone code",
-                            list(pantone_codes.keys()),
-                            format_func=lambda x: f"{x} - {pantone_codes[x]}"
+                        pantone_code_type = st.selectbox(
+                            "Select Pantone code type",
+                            ["TPX", "TPG"],
+                            key="pantone_code_type"
                         )
-                        custom_color = get_color_from_code(pantone_code)
+                        
+                        if pantone_code_type == "TPX":
+                            # Create a dictionary of TPX codes and names
+                            tpx_codes = {code_info['code']: name for name, code_info in pantone_colors.TPX_COLORS.items()}
+                            pantone_tpx_code = st.selectbox(
+                                "Select Pantone TPX code",
+                                list(tpx_codes.keys()),
+                                format_func=lambda x: f"{x} - {tpx_codes[x]}",
+                                key="pantone_tpx_code"
+                            )
+                            # Get color from TPX database
+                            selected_color = pantone_colors.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
+                            custom_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
+                            color_source = "pantone_tpx"
+                        elif pantone_code_type == "TPG":
+                            # Create a dictionary of TPG codes and names
+                            tpg_codes = {code_info['code']: name for name, code_info in pantone_colors.TPG_COLORS.items()}
+                            pantone_tpg_code = st.selectbox(
+                                "Select Pantone TPG code",
+                                list(tpg_codes.keys()),
+                                format_func=lambda x: f"{x} - {tpg_codes[x]}",
+                                key="pantone_tpg_code"
+                            )
+                            # Get color from TPG database
+                            selected_color = pantone_colors.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
+                            custom_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
+                            color_source = "pantone_tpg"
                 
                 if st.button("Combine Layers"):
                     with st.spinner("Combining layers..."):
@@ -368,25 +511,57 @@ if uploaded_file is not None:
                         mask[is_fg] = 255
                         percentage = (np.sum(mask) / 255 / (h * w)) * 100
                         
-                        # Add the combined layer to the list
+                        # Set the color for the combined layer
                         if custom_color:
                             new_color = custom_color
                         else:
                             # Use color from layer1 if no custom color
                             new_color = color_info[layer1_idx]['color']
                         
+                        # Remove the original layers
+                        replaced_indices = sorted([layer1_idx, layer2_idx], reverse=True)
+                        for idx in replaced_indices:
+                            color_layers.pop(idx)
+                            color_info.pop(idx)
+                        
+                        # Add the combined layer
                         color_layers.append(combined)
                         color_info.append({
                             'color': new_color,
                             'percentage': percentage
                         })
                         
-                        # Show the new combined layer
-                        combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
-                        st.image(combined_rgb, caption="Combined Layer", use_column_width=True)
+                        # Display the result
+                        result_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+                        st.image(result_rgb, caption="Combined Layer", use_column_width=True)
                         
-                        # Information about the new layer
-                        st.success(f"Created new layer {len(color_layers)} with {percentage:.1f}% coverage")
+                        # Add download button for this combined layer
+                        result_rgb_pil = Image.fromarray(result_rgb)
+                        result_bytes = io.BytesIO()
+                        result_rgb_pil.save(result_bytes, format="PNG")
+                        
+                        hex_color = "{:02x}{:02x}{:02x}".format(
+                            new_color[2], new_color[1], new_color[0]  # BGR to RGB
+                        )
+                        
+                        st.download_button(
+                            label=f"Download Combined Layer",
+                            data=result_bytes.getvalue(),
+                            file_name=f"combined_layer_{layer1_idx+1}_{layer2_idx+1}.png",
+                            mime="image/png",
+                            key=f"download_combined_{layer1_idx}_{layer2_idx}"
+                        )
+                        
+                        # Store this new layer in session state
+                        if 'custom_layers' not in st.session_state:
+                            st.session_state.custom_layers = []
+                        
+                        st.session_state.custom_layers.append({
+                            'layer': combined,
+                            'name': f"Combined {layer1_idx+1} & {layer2_idx+1}"
+                        })
+                        
+                        st.success(f"Layers {layer1_idx+1} and {layer2_idx+1} combined successfully!")
             else:
                 st.warning("You need at least 2 layers to use this feature")
         
@@ -408,6 +583,9 @@ if uploaded_file is not None:
                 )
                 
                 new_color = None
+                color_source = None
+                pantone_tpx_code = None
+                pantone_tpg_code = None
                 
                 if color_input_method == "Color Picker":
                     # Get current color in hex
@@ -417,6 +595,7 @@ if uploaded_file is not None:
                     )
                     new_color_hex = st.color_picker("Select new color", current_hex)
                     new_color = get_color_from_code(new_color_hex)
+                    color_source = "color_picker"
                 
                 elif color_input_method == "RGB Value":
                     col1, col2, col3 = st.columns(3)
@@ -430,6 +609,7 @@ if uploaded_file is not None:
                     with col3:
                         b_val = st.number_input("B", 0, 255, current_color[0])
                     new_color = (b_val, g_val, r_val)  # BGR format for OpenCV
+                    color_source = "rgb_value"
                 
                 elif color_input_method == "Hex Code":
                     current_color = color_info[layer_idx]['color']
@@ -438,15 +618,41 @@ if uploaded_file is not None:
                     )
                     hex_val = st.text_input("Hex Code (e.g., #FF0000)", current_hex)
                     new_color = get_color_from_code(hex_val)
+                    color_source = "hex_code"
                 
                 elif color_input_method == "Pantone TPX/TPG":
-                    pantone_code = st.selectbox(
-                        "Select Pantone code",
-                        list(pantone_codes.keys()),
-                        format_func=lambda x: f"{x} - {pantone_codes[x]}",
-                        key="recolor_pantone"
+                    pantone_code_type = st.selectbox(
+                        "Select Pantone code type",
+                        ["TPX", "TPG"],
+                        key="pantone_code_type"
                     )
-                    new_color = get_color_from_code(pantone_code)
+                    
+                    if pantone_code_type == "TPX":
+                        # Create a dictionary of TPX codes and names
+                        tpx_codes = {code_info['code']: name for name, code_info in pantone_colors.TPX_COLORS.items()}
+                        pantone_tpx_code = st.selectbox(
+                            "Select Pantone TPX code",
+                            list(tpx_codes.keys()),
+                            format_func=lambda x: f"{x} - {tpx_codes[x]}",
+                            key="pantone_tpx_code"
+                        )
+                        # Get color from TPX database
+                        selected_color = pantone_colors.TPX_COLORS[tpx_codes[pantone_tpx_code]]['rgb']
+                        new_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
+                        color_source = "pantone_tpx"
+                    elif pantone_code_type == "TPG":
+                        # Create a dictionary of TPG codes and names
+                        tpg_codes = {code_info['code']: name for name, code_info in pantone_colors.TPG_COLORS.items()}
+                        pantone_tpg_code = st.selectbox(
+                            "Select Pantone TPG code",
+                            list(tpg_codes.keys()),
+                            format_func=lambda x: f"{x} - {tpg_codes[x]}",
+                            key="pantone_tpg_code"
+                        )
+                        # Get color from TPG database
+                        selected_color = pantone_colors.TPG_COLORS[tpg_codes[pantone_tpg_code]]['rgb']
+                        new_color = (selected_color[2], selected_color[1], selected_color[0])  # Convert to BGR
+                        color_source = "pantone_tpg"
                 
                 # Preview the color
                 st.markdown(
@@ -463,20 +669,126 @@ if uploaded_file is not None:
                         # Change the color
                         recolored_layer = change_layer_color(layer, new_color, bg_color_rgb)
                         
-                        # Update the color information
+                        # Display results
+                        recolored_rgb = cv2.cvtColor(recolored_layer, cv2.COLOR_BGR2RGB) 
+                        st.image(recolored_rgb, caption=f"Layer {layer_idx+1} with new color", use_column_width=True)
+                        
+                        # Add download button for this recolored layer
+                        recolored_rgb_pil = Image.fromarray(recolored_rgb)
+                        recolored_bytes = io.BytesIO()
+                        recolored_rgb_pil.save(recolored_bytes, format="PNG")
+                        
+                        hex_color = "{:02x}{:02x}{:02x}".format(
+                            new_color[2], new_color[1], new_color[0]  # BGR to RGB
+                        )
+                        
+                        st.download_button(
+                            label=f"Download Recolored Layer",
+                            data=recolored_bytes.getvalue(),
+                            file_name=f"recolored_layer_{layer_idx+1}_{hex_color}.png",
+                            mime="image/png",
+                            key=f"download_recolored_{layer_idx}_{hex_color}"
+                        )
+                        
+                        # Update the color layer and info
+                        color_layers[layer_idx] = recolored_layer
                         color_info[layer_idx]['color'] = new_color
                         
-                        # Update the layer
-                        color_layers[layer_idx] = recolored_layer
+                        # Store this recolored layer in session state
+                        if 'custom_layers' not in st.session_state:
+                            st.session_state.custom_layers = []
                         
-                        # Show the recolored layer
-                        recolored_rgb = cv2.cvtColor(recolored_layer, cv2.COLOR_BGR2RGB)
-                        st.image(recolored_rgb, caption=f"Recolored Layer {layer_idx+1}", use_column_width=True)
+                        # Convert BGR color to hex for name
+                        hex_color = "{:02x}{:02x}{:02x}".format(
+                            new_color[2], new_color[1], new_color[0]  # BGR to RGB
+                        )
+                        
+                        # Get the color name for display if it was selected from a predefined system
+                        color_description = f"#{hex_color}"
+                        if color_source == "pantone_tpx" and pantone_tpx_code:
+                            # Get the Pantone TPX name from the code
+                            for name, code_info in pantone_colors.TPX_COLORS.items():
+                                if code_info['code'] == pantone_tpx_code:
+                                    color_description = f"Pantone TPX {pantone_tpx_code} ({name})"
+                                    break
+                        elif color_source == "pantone_tpg" and pantone_tpg_code:
+                            # Get the Pantone TPG name from the code
+                            for name, code_info in pantone_colors.TPG_COLORS.items():
+                                if code_info['code'] == pantone_tpg_code:
+                                    color_description = f"Pantone TPG {pantone_tpg_code} ({name})"
+                                    break
+                        
+                        st.session_state.custom_layers.append({
+                            'layer': recolored_layer,
+                            'name': f"Layer {layer_idx+1} recolored to {color_description}"
+                        })
                         
                         # Success message
-                        st.success(f"Layer {layer_idx+1} has been recolored")
+                        st.success(f"Layer {layer_idx+1} has been recolored!")
             else:
                 st.warning("No layers available to recolor")
+
+        # Add a section to show custom manipulated layers
+        if 'custom_layers' in st.session_state and len(st.session_state.custom_layers) > 0:
+            st.markdown("""
+            <div style='background-color: #f0f7ff; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;'>
+                <h3>Manipulated Layers Gallery</h3>
+                <p>Browse and download your custom combined and recolored layers from this session.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            # Create a list of all layers names for the selector
+            layer_names = [layer_info['name'] for layer_info in st.session_state.custom_layers]
+            
+            # Select a layer to view
+            selected_layer_name = st.selectbox(
+                "Select a manipulated layer to view",
+                layer_names,
+                key="custom_layer_selector"
+            )
+            
+            # Find the selected layer
+            selected_idx = layer_names.index(selected_layer_name)
+            selected_layer = st.session_state.custom_layers[selected_idx]['layer']
+            
+            # Display the selected layer
+            selected_layer_rgb = cv2.cvtColor(selected_layer, cv2.COLOR_BGR2RGB)
+            st.image(selected_layer_rgb, caption=selected_layer_name, use_column_width=True)
+            
+            # Add download button for this layer
+            layer_rgb_pil = Image.fromarray(selected_layer_rgb)
+            layer_bytes = io.BytesIO()
+            layer_rgb_pil.save(layer_bytes, format="PNG")
+            
+            st.download_button(
+                label="Download This Layer",
+                data=layer_bytes.getvalue(),
+                file_name=f"{selected_layer_name.replace(' ', '_')}.png",
+                mime="image/png",
+                key=f"download_custom_{selected_idx}"
+            )
+            
+            # Option to create black and white mask
+            if st.button("Create B&W Mask"):
+                # Create mask (white foreground, black background)
+                mask = np.zeros((selected_layer.shape[0], selected_layer.shape[1]), dtype=np.uint8)
+                is_fg = np.logical_not(np.all(selected_layer == bg_color_rgb, axis=2))
+                mask[is_fg] = 255
+                
+                # Display the mask
+                st.image(mask, caption=f"Mask for {selected_layer_name}", use_column_width=True)
+                
+                # Add download button for mask
+                mask_pil = Image.fromarray(mask)
+                mask_bytes = io.BytesIO()
+                mask_pil.save(mask_bytes, format="PNG")
+                
+                st.download_button(
+                    label="Download This Mask",
+                    data=mask_bytes.getvalue(),
+                    file_name=f"mask_{selected_layer_name.replace(' ', '_')}.png",
+                    mime="image/png",
+                    key=f"download_custom_mask_{selected_idx}"
+                )
 
 else:
     # Display sample usage when no image is uploaded
