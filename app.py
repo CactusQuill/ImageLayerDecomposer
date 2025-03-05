@@ -59,7 +59,8 @@ from color_separation import (
     kmeans_color_separation,
     dominant_color_separation, 
     threshold_color_separation,
-    lab_color_separation
+    lab_color_separation,
+    exact_color_separation
 )
 
 # Sidebar for controls
@@ -73,6 +74,7 @@ with st.sidebar:
         method = st.selectbox(
             "Choose separation method",
             [
+                "Exact color extraction",  
                 "K-means clustering", 
                 "Dominant color extraction",
                 "Color thresholding",
@@ -80,8 +82,13 @@ with st.sidebar:
             ]
         )
         
+        # Parameters for Exact color extraction
+        if method == "Exact color extraction":
+            max_colors = st.slider("Maximum number of colors to extract", 5, 200, 50)
+            st.warning("Note: Images with gradients or noise may have many unique colors. This method creates one layer per unique color.")
+        
         # Parameters for K-means
-        if method == "K-means clustering":
+        elif method == "K-means clustering":
             num_colors = st.slider("Number of colors to extract", 2, 20, 5)
             compactness = st.slider("Color compactness", 0.1, 10.0, 1.0, 0.1)
         
@@ -143,7 +150,14 @@ if uploaded_file is not None:
         # Apply selected method
         with st.spinner("Separating colors... Please wait."):
             # Process the image based on the selected method
-            if method == "K-means clustering":
+            if method == "Exact color extraction":
+                color_layers, color_info = exact_color_separation(
+                    img_cv,
+                    max_colors=max_colors,
+                    bg_color=bg_color_rgb
+                )
+            
+            elif method == "K-means clustering":
                 color_layers, color_info = kmeans_color_separation(
                     img_cv, 
                     n_colors=num_colors,
@@ -280,6 +294,7 @@ else:
     st.markdown("""
     1. Upload an image using the sidebar file uploader
     2. Choose a color separation method:
+       - **Exact color extraction**: Creates one layer per unique color, preserving all details
        - **K-means clustering**: Segments the image into distinct color clusters
        - **Dominant color extraction**: Extracts the most common colors
        - **Color thresholding**: Uses thresholds to separate colors

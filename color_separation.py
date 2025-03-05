@@ -402,3 +402,74 @@ def lab_color_separation(img, n_colors=5, delta_e=15, bg_color=(255, 255, 255),
         color_info.append({'color': tuple(color_bgr.astype(int)), 'percentage': percentage})
     
     return color_layers, color_info
+
+def exact_color_separation(img, max_colors=100, bg_color=(255, 255, 255)):
+    """
+    Separate an image by extracting EXACT colors without any clustering or approximation.
+    This method preserves all details and creates a separate layer for each unique color.
+    
+    Args:
+        img: OpenCV image in BGR format
+        max_colors: Maximum number of colors to extract (to avoid too many layers)
+        bg_color: Background color for the output layers (BGR)
+        
+    Returns:
+        Tuple of (color_layers, color_info)
+    """
+    h, w = img.shape[:2]
+    
+    # Get unique colors from the image with their counts
+    # Reshape the image to a 2D array of pixels
+    pixels = img.reshape(-1, 3)
+    
+    # Find unique colors and their counts
+    unique_colors, counts = np.unique(pixels, axis=0, return_counts=True)
+    
+    # Convert to a list of tuples for sorting
+    color_counts = [(tuple(color), count) for color, count in zip(unique_colors, counts)]
+    
+    # Sort by count (most common first)
+    color_counts.sort(key=lambda x: x[1], reverse=True)
+    
+    # Limit to max_colors
+    if len(color_counts) > max_colors:
+        print(f"Image has {len(color_counts)} unique colors. Limiting to top {max_colors}.")
+        color_counts = color_counts[:max_colors]
+    
+    # Calculate total pixels for percentage
+    total_pixels = h * w
+    
+    # Create color layers
+    color_layers = []
+    color_info = []
+    
+    for color, count in color_counts:
+        # Skip colors that are too rare (less than 0.01% of the image)
+        if count / total_pixels < 0.0001:
+            continue
+            
+        # Create a binary mask for this exact color
+        mask = np.zeros((h, w), dtype=np.uint8)
+        
+        # This is a vectorized approach that is much faster than pixel-by-pixel
+        # Create a boolean mask where all three channels match the current color
+        r_match = img[:,:,0] == color[0]
+        g_match = img[:,:,1] == color[1]
+        b_match = img[:,:,2] == color[2]
+        
+        # Combine the channel matches
+        color_match = r_match & g_match & b_match
+        
+        # Set matching pixels to 255 in the mask
+        mask[color_match] = 255
+        
+        # Create color layer
+        layer = create_color_layer(img, mask, color, bg_color)
+        
+        # Calculate percentage
+        percentage = (count / total_pixels) * 100
+        
+        color_layers.append(layer)
+        color_info.append({'color': color, 'percentage': percentage})
+    
+    return color_layers, color_info
