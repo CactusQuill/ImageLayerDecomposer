@@ -28,6 +28,12 @@ ColorSep is an advanced color separation tool specifically designed for textile 
   - Combined preview of all layers
   - Downloadable results as individual PNGs or ZIP package
 
+- **Advanced Layer Manipulation**:
+  - Combine two layers into a new one
+  - Change colors of layers with professional color codes
+  - Support for Pantone TPX and TPG color systems
+  - Exact color extraction for pixel-perfect separation
+
 ## Installation
 
 1. Clone this repository or download the files
@@ -65,10 +71,12 @@ streamlit run app.py
 
 The application uses several advanced image processing techniques to separate colors:
 
-1. **K-means Clustering**: Uses unsupervised learning to group similar colors together, creating distinct clusters
-2. **LAB Color Space**: Works in a perceptually uniform color space to better match human color perception
-3. **Connected Component Analysis**: Identifies and extracts continuous regions of similar colors
-4. **Morphological Operations**: Removes noise and refines color regions
+1. **Exact Color Extraction**: Creates one layer per unique color for pixel-perfect separation
+2. **K-means Clustering**: Uses unsupervised learning to group similar colors together, creating distinct clusters
+3. **LAB Color Space**: Works in a perceptually uniform color space to better match human color perception
+4. **Connected Component Analysis**: Identifies and extracts continuous regions of similar colors
+5. **Morphological Operations**: Removes noise and refines color regions
+6. **Professional Color Systems**: Supports Pantone TPX and TPG color codes used in the textile industry
 
 ## Applications in Textile Printing
 

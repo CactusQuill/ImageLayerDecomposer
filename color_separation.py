@@ -473,3 +473,170 @@ def exact_color_separation(img, max_colors=100, bg_color=(255, 255, 255)):
         color_info.append({'color': color, 'percentage': percentage})
     
     return color_layers, color_info
+
+def combine_layers(layer1, layer2, color=None, bg_color=(255, 255, 255)):
+    """
+    Combine two color layers into a new layer.
+    
+    Args:
+        layer1: First layer (BGR format)
+        layer2: Second layer (BGR format)
+        color: Optional color to use for the combined layer (BGR format)
+               If None, keep the original colors from both layers
+        bg_color: Background color for the output layer (BGR)
+        
+    Returns:
+        Combined layer
+    """
+    # Ensure both layers have the same dimensions
+    if layer1.shape != layer2.shape:
+        raise ValueError("Layers must have the same dimensions")
+    
+    h, w = layer1.shape[:2]
+    
+    # Create masks for non-background pixels in each layer
+    # Background pixels are those matching bg_color exactly
+    mask1 = np.zeros((h, w), dtype=np.uint8)
+    mask2 = np.zeros((h, w), dtype=np.uint8)
+    
+    # Create boolean masks for non-background pixels
+    is_fg1 = np.logical_not(np.all(layer1 == bg_color, axis=2))
+    is_fg2 = np.logical_not(np.all(layer2 == bg_color, axis=2))
+    
+    # Set mask values
+    mask1[is_fg1] = 255
+    mask2[is_fg2] = 255
+    
+    # Combine masks
+    combined_mask = cv2.bitwise_or(mask1, mask2)
+    
+    # Create combined layer
+    if color is not None:
+        # Use specified color for all foreground pixels
+        combined_layer = create_color_layer(np.zeros_like(layer1), combined_mask, color, bg_color)
+    else:
+        # Initialize with background color
+        combined_layer = np.full((h, w, 3), bg_color, dtype=np.uint8)
+        
+        # First add layer1 content
+        combined_layer[is_fg1] = layer1[is_fg1]
+        
+        # Then add layer2 content (overwriting layer1 where they overlap)
+        combined_layer[is_fg2] = layer2[is_fg2]
+    
+    return combined_layer
+
+def change_layer_color(layer, new_color, bg_color=(255, 255, 255)):
+    """
+    Change the color of a layer while preserving its shape/mask.
+    
+    Args:
+        layer: Layer to modify (BGR format)
+        new_color: New color to apply (BGR format)
+        bg_color: Background color of the layer (BGR)
+        
+    Returns:
+        Recolored layer
+    """
+    h, w = layer.shape[:2]
+    
+    # Create mask for non-background pixels
+    mask = np.zeros((h, w), dtype=np.uint8)
+    
+    # Background pixels are those matching bg_color exactly
+    is_bg = np.all(layer == bg_color, axis=2)
+    is_fg = np.logical_not(is_bg)
+    
+    # Set mask values
+    mask[is_fg] = 255
+    
+    # Create new layer with the specified color
+    new_layer = create_color_layer(np.zeros_like(layer), mask, new_color, bg_color)
+    
+    return new_layer
+
+# Pantone TPX and TPG color mappings (limited set, can be expanded)
+# Format: 'CODE': (R, G, B)
+PANTONE_TPX = {
+    '19-4052 TCX': (15, 76, 129),    # Classic Blue (Color of the Year 2020)
+    '16-1546 TCX': (244, 76, 113),   # Living Coral (Color of the Year 2019)
+    '18-3838 TCX': (101, 78, 163),   # Ultra Violet (Color of the Year 2018)
+    '15-0343 TCX': (136, 176, 75),   # Greenery (Color of the Year 2017)
+    '13-1520 TCX': (247, 202, 201),  # Rose Quartz (Color of the Year 2016)
+    '14-4313 TCX': (145, 168, 208),  # Serenity (Color of the Year 2016)
+    '18-1438 TCX': (141, 58, 41),    # Marsala (Color of the Year 2015)
+    '17-1360 TCX': (186, 59, 30),    # Tangerine Tango (Color of the Year 2012)
+    '11-0601 TCX': (237, 234, 218),  # Whisper White
+    '19-4005 TCX': (44, 44, 44),     # Black
+    '19-1664 TCX': (163, 0, 43),     # True Red
+    '17-1462 TCX': (221, 65, 36),    # Flame Orange
+    '14-0756 TCX': (212, 169, 0),    # Yellow Gold
+    '15-5534 TCX': (0, 151, 132),    # Turquoise
+    '19-3950 TCX': (72, 40, 125),    # Purple
+    '18-0135 TCX': (0, 139, 54),     # Kelly Green
+    '14-4122 TCX': (85, 180, 233),   # Sky Blue
+}
+
+PANTONE_TPG = {
+    '19-4052 TPG': (40, 96, 143),    # Classic Blue (Color of the Year 2020)
+    '16-1546 TPG': (233, 81, 96),    # Living Coral (Color of the Year 2019)
+    '18-3838 TPG': (117, 83, 145),   # Ultra Violet (Color of the Year 2018)
+    '15-0343 TPG': (136, 171, 81),   # Greenery (Color of the Year 2017)
+    '13-1520 TPG': (242, 190, 182),  # Rose Quartz (Color of the Year 2016)
+    '14-4313 TPG': (146, 170, 199),  # Serenity (Color of the Year 2016)
+    '18-1438 TPG': (149, 78, 55),    # Marsala (Color of the Year 2015)
+    '17-1360 TPG': (191, 76, 47),    # Tangerine Tango (Color of the Year 2012)
+    '11-0601 TPG': (232, 228, 213),  # Whisper White
+    '19-4005 TPG': (60, 60, 59),     # Black
+    '19-1664 TPG': (168, 26, 49),    # True Red
+    '17-1462 TPG': (218, 83, 44),    # Flame Orange
+    '14-0756 TPG': (214, 170, 40),   # Yellow Gold
+    '15-5534 TPG': (0, 148, 126),    # Turquoise
+    '19-3950 TPG': (82, 55, 113),    # Purple
+    '18-0135 TPG': (0, 131, 62),     # Kelly Green
+    '14-4122 TPG': (94, 175, 221),   # Sky Blue
+}
+
+def get_color_from_code(color_code):
+    """
+    Convert a color code to BGR color value.
+    
+    Args:
+        color_code: Color code string (RGB or Pantone)
+        
+    Returns:
+        BGR color tuple
+    """
+    # Handle RGB format (r,g,b)
+    if color_code.startswith('(') and color_code.endswith(')'):
+        try:
+            # Parse RGB values
+            rgb = eval(color_code)
+            if isinstance(rgb, tuple) and len(rgb) == 3:
+                # Convert RGB to BGR
+                return (rgb[2], rgb[1], rgb[0])
+        except:
+            pass
+    
+    # Handle hex format (#rrggbb)
+    if color_code.startswith('#') and len(color_code) == 7:
+        try:
+            r = int(color_code[1:3], 16)
+            g = int(color_code[3:5], 16)
+            b = int(color_code[5:7], 16)
+            return (b, g, r)  # BGR format for OpenCV
+        except:
+            pass
+    
+    # Handle Pantone TPX format
+    if 'TPX' in color_code and color_code in PANTONE_TPX:
+        rgb = PANTONE_TPX[color_code]
+        return (rgb[2], rgb[1], rgb[0])  # Convert RGB to BGR
+    
+    # Handle Pantone TPG format
+    if 'TPG' in color_code and color_code in PANTONE_TPG:
+        rgb = PANTONE_TPG[color_code]
+        return (rgb[2], rgb[1], rgb[0])  # Convert RGB to BGR
+    
+    # Return black if format not recognized
+    return (0, 0, 0)

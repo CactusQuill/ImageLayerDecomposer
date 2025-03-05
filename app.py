@@ -60,8 +60,17 @@ from color_separation import (
     dominant_color_separation, 
     threshold_color_separation,
     lab_color_separation,
-    exact_color_separation
+    exact_color_separation,
+    combine_layers,
+    change_layer_color,
+    get_color_from_code
 )
+
+# Import Pantone color codes
+from pantone_colors import get_all_pantone_codes
+
+# Get Pantone color codes for display
+pantone_codes = get_all_pantone_codes()
 
 # Sidebar for controls
 with st.sidebar:
@@ -286,6 +295,188 @@ if uploaded_file is not None:
                         file_name="color_layers.zip",
                         mime="application/zip"
                     )
+        
+        # Layer manipulation tools
+        st.markdown("<h3>Layer Manipulation Tools</h3>", unsafe_allow_html=True)
+        
+        with st.expander("Combine Layers"):
+            if len(color_layers) >= 2:
+                col1, col2 = st.columns(2)
+                with col1:
+                    layer1_idx = st.selectbox(
+                        "Select first layer",
+                        range(len(color_layers)),
+                        format_func=lambda i: f"Layer {i+1} - {color_info[i]['percentage']:.1f}%"
+                    )
+                with col2:
+                    layer2_idx = st.selectbox(
+                        "Select second layer",
+                        range(len(color_layers)),
+                        format_func=lambda i: f"Layer {i+1} - {color_info[i]['percentage']:.1f}%",
+                        index=min(1, len(color_layers)-1)  # Default to second layer
+                    )
+                
+                use_custom_color = st.checkbox("Use custom color for combined layer")
+                custom_color = None
+                
+                if use_custom_color:
+                    color_input_method = st.radio(
+                        "Color input method",
+                        ["Color Picker", "RGB Value", "Hex Code", "Pantone TPX/TPG"],
+                        horizontal=True
+                    )
+                    
+                    if color_input_method == "Color Picker":
+                        custom_color_hex = st.color_picker("Select color", "#FF0000")
+                        custom_color = get_color_from_code(custom_color_hex)
+                    
+                    elif color_input_method == "RGB Value":
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            r_val = st.number_input("R", 0, 255, 255)
+                        with col2:
+                            g_val = st.number_input("G", 0, 255, 0)
+                        with col3:
+                            b_val = st.number_input("B", 0, 255, 0)
+                        custom_color = (b_val, g_val, r_val)  # BGR format for OpenCV
+                    
+                    elif color_input_method == "Hex Code":
+                        hex_val = st.text_input("Hex Code (e.g., #FF0000)", "#FF0000")
+                        custom_color = get_color_from_code(hex_val)
+                    
+                    elif color_input_method == "Pantone TPX/TPG":
+                        pantone_code = st.selectbox(
+                            "Select Pantone code",
+                            list(pantone_codes.keys()),
+                            format_func=lambda x: f"{x} - {pantone_codes[x]}"
+                        )
+                        custom_color = get_color_from_code(pantone_code)
+                
+                if st.button("Combine Layers"):
+                    with st.spinner("Combining layers..."):
+                        # Get the selected layers
+                        layer1 = color_layers[layer1_idx]
+                        layer2 = color_layers[layer2_idx]
+                        
+                        # Combine the layers
+                        combined = combine_layers(layer1, layer2, custom_color, bg_color_rgb)
+                        
+                        # Calculate the percentage of the combined layer
+                        h, w = combined.shape[:2]
+                        mask = np.zeros((h, w), dtype=np.uint8)
+                        is_fg = np.logical_not(np.all(combined == bg_color_rgb, axis=2))
+                        mask[is_fg] = 255
+                        percentage = (np.sum(mask) / 255 / (h * w)) * 100
+                        
+                        # Add the combined layer to the list
+                        if custom_color:
+                            new_color = custom_color
+                        else:
+                            # Use color from layer1 if no custom color
+                            new_color = color_info[layer1_idx]['color']
+                        
+                        color_layers.append(combined)
+                        color_info.append({
+                            'color': new_color,
+                            'percentage': percentage
+                        })
+                        
+                        # Show the new combined layer
+                        combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+                        st.image(combined_rgb, caption="Combined Layer", use_column_width=True)
+                        
+                        # Information about the new layer
+                        st.success(f"Created new layer {len(color_layers)} with {percentage:.1f}% coverage")
+            else:
+                st.warning("You need at least 2 layers to use this feature")
+        
+        with st.expander("Change Layer Color"):
+            if len(color_layers) > 0:
+                # Select layer to change
+                layer_idx = st.selectbox(
+                    "Select layer to recolor",
+                    range(len(color_layers)),
+                    format_func=lambda i: f"Layer {i+1} - {color_info[i]['percentage']:.1f}%"
+                )
+                
+                # Color input method
+                color_input_method = st.radio(
+                    "Color input method",
+                    ["Color Picker", "RGB Value", "Hex Code", "Pantone TPX/TPG"],
+                    horizontal=True,
+                    key="recolor_method"
+                )
+                
+                new_color = None
+                
+                if color_input_method == "Color Picker":
+                    # Get current color in hex
+                    current_color = color_info[layer_idx]['color']
+                    current_hex = "#{:02x}{:02x}{:02x}".format(
+                        current_color[2], current_color[1], current_color[0]
+                    )
+                    new_color_hex = st.color_picker("Select new color", current_hex)
+                    new_color = get_color_from_code(new_color_hex)
+                
+                elif color_input_method == "RGB Value":
+                    col1, col2, col3 = st.columns(3)
+                    # Get current color
+                    current_color = color_info[layer_idx]['color']
+                    
+                    with col1:
+                        r_val = st.number_input("R", 0, 255, current_color[2])
+                    with col2:
+                        g_val = st.number_input("G", 0, 255, current_color[1])
+                    with col3:
+                        b_val = st.number_input("B", 0, 255, current_color[0])
+                    new_color = (b_val, g_val, r_val)  # BGR format for OpenCV
+                
+                elif color_input_method == "Hex Code":
+                    current_color = color_info[layer_idx]['color']
+                    current_hex = "#{:02x}{:02x}{:02x}".format(
+                        current_color[2], current_color[1], current_color[0]
+                    )
+                    hex_val = st.text_input("Hex Code (e.g., #FF0000)", current_hex)
+                    new_color = get_color_from_code(hex_val)
+                
+                elif color_input_method == "Pantone TPX/TPG":
+                    pantone_code = st.selectbox(
+                        "Select Pantone code",
+                        list(pantone_codes.keys()),
+                        format_func=lambda x: f"{x} - {pantone_codes[x]}",
+                        key="recolor_pantone"
+                    )
+                    new_color = get_color_from_code(pantone_code)
+                
+                # Preview the color
+                st.markdown(
+                    f"<div><span class='color-chip' style='background-color: #{new_color[2]:02x}{new_color[1]:02x}{new_color[0]:02x}; width: 50px; height: 30px;'></span> Selected color: RGB({new_color[2]}, {new_color[1]}, {new_color[0]})</div>",
+                    unsafe_allow_html=True
+                )
+                
+                # Apply button
+                if st.button("Apply New Color"):
+                    with st.spinner("Changing layer color..."):
+                        # Get the selected layer
+                        layer = color_layers[layer_idx]
+                        
+                        # Change the color
+                        recolored_layer = change_layer_color(layer, new_color, bg_color_rgb)
+                        
+                        # Update the color information
+                        color_info[layer_idx]['color'] = new_color
+                        
+                        # Update the layer
+                        color_layers[layer_idx] = recolored_layer
+                        
+                        # Show the recolored layer
+                        recolored_rgb = cv2.cvtColor(recolored_layer, cv2.COLOR_BGR2RGB)
+                        st.image(recolored_rgb, caption=f"Recolored Layer {layer_idx+1}", use_column_width=True)
+                        
+                        # Success message
+                        st.success(f"Layer {layer_idx+1} has been recolored")
+            else:
+                st.warning("No layers available to recolor")
 
 else:
     # Display sample usage when no image is uploaded
@@ -304,6 +495,10 @@ else:
     5. Download individual layers or all layers as a zip file
     
     This tool is ideal for textile printing where each color needs to be printed separately.
+    
+    ### Advanced Features:
+    - **Combine Layers**: Merge two color layers into a single layer
+    - **Change Layer Colors**: Modify the color of any layer using RGB, Hex, or Pantone color codes
     """)
     
     st.info("⬅️ Use the sidebar to upload your image and get started!")
