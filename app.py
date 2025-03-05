@@ -87,6 +87,16 @@ st.markdown("""
 st.markdown("<h1 class='main-header'>ColorSep: Textile Color Separation Tool</h1>", unsafe_allow_html=True)
 st.markdown("<p class='info-text'>Upload an image and extract different color layers for textile printing</p>", unsafe_allow_html=True)
 
+# Initialize session state variables if they don't exist
+if 'custom_layers' not in st.session_state:
+    st.session_state.custom_layers = []
+    
+if 'layer_visibility' not in st.session_state:
+    st.session_state.layer_visibility = []
+    
+if 'layer_order' not in st.session_state:
+    st.session_state.layer_order = []
+
 # Import color separation functions from external modules
 from color_separation import (
     kmeans_color_separation,
@@ -96,7 +106,13 @@ from color_separation import (
     exact_color_separation,
     combine_layers,
     change_layer_color,
-    get_color_from_code
+    get_color_from_code,
+    invert_layer,
+    erode_dilate_layer,
+    transform_layer,
+    adjust_layer_opacity,
+    apply_blur_sharpen,
+    apply_threshold
 )
 
 # Import Pantone color codes
@@ -895,6 +911,159 @@ This package contains color-separated layers for textile printing.
             else:
                 st.warning("No layers available to recolor")
 
+        with st.expander("Layer Manipulation"):
+            st.markdown("<h3>Manipulate your color layers here</h3>", unsafe_allow_html=True)
+            
+            if len(color_layers) > 0:
+                # Select a layer to manipulate
+                layer_idx = st.selectbox(
+                    "Select layer to manipulate",
+                    range(len(color_layers)),
+                    format_func=lambda i: f"Layer {i+1}: {color_info[i]['color']}"
+                )
+                
+                # Show current layer preview
+                st.image(cv2.cvtColor(color_layers[layer_idx], cv2.COLOR_BGR2RGB), caption=f"Original Layer {layer_idx+1}", width=200)
+                
+                # Create tabs for different manipulation categories
+                manipulation_tabs = st.tabs(["Basic", "Morphology", "Transform", "Effects"])
+                
+                # Basic operations (invert, threshold)
+                with manipulation_tabs[0]:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Invert Layer", key="invert_layer"):
+                            with st.spinner("Inverting layer..."):
+                                modified_layer = invert_layer(
+                                    color_layers[layer_idx],
+                                    bg_color=bg_color_rgb
+                                )
+                                st.session_state.custom_layers.append({
+                                    'layer': modified_layer,
+                                    'description': f"Inverted Layer {layer_idx+1}"
+                                })
+                                st.success("Layer inverted successfully!")
+                    
+                    with col2:
+                        threshold_val = st.slider("Threshold value", 0, 255, 127, key="threshold_slider")
+                        if st.button("Apply Threshold", key="apply_threshold"):
+                            with st.spinner("Applying threshold..."):
+                                modified_layer = apply_threshold(
+                                    color_layers[layer_idx],
+                                    threshold_value=threshold_val,
+                                    bg_color=bg_color_rgb
+                                )
+                                st.session_state.custom_layers.append({
+                                    'layer': modified_layer,
+                                    'description': f"Thresholded Layer {layer_idx+1} (value: {threshold_val})"
+                                })
+                                st.success("Threshold applied successfully!")
+                
+                # Morphology operations (erode, dilate)
+                with manipulation_tabs[1]:
+                    morph_op = st.radio("Operation", ["Erode", "Dilate"], key="morph_op")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        kernel_size = st.slider("Kernel size", 1, 15, 3, 2, key="kernel_size")
+                    
+                    with col2:
+                        iterations = st.slider("Iterations", 1, 10, 1, key="iterations")
+                    
+                    if st.button("Apply Operation", key="apply_morph"):
+                        with st.spinner(f"Applying {morph_op.lower()}..."):
+                            modified_layer = erode_dilate_layer(
+                                color_layers[layer_idx],
+                                operation=morph_op.lower(),
+                                kernel_size=kernel_size,
+                                iterations=iterations,
+                                bg_color=bg_color_rgb
+                            )
+                            st.session_state.custom_layers.append({
+                                'layer': modified_layer,
+                                'description': f"{morph_op}d Layer {layer_idx+1} (size: {kernel_size}, iter: {iterations})"
+                            })
+                            st.success(f"{morph_op} operation applied successfully!")
+                
+                # Transform operations (rotate, flip)
+                with manipulation_tabs[2]:
+                    transform_op = st.selectbox(
+                        "Transformation",
+                        ["Rotate 90°", "Rotate 180°", "Rotate 270°", "Flip Horizontal", "Flip Vertical"],
+                        key="transform_op"
+                    )
+                    
+                    # Create mapping between user-friendly names and function parameters
+                    transform_map = {
+                        "Rotate 90°": "rotate90",
+                        "Rotate 180°": "rotate180",
+                        "Rotate 270°": "rotate270",
+                        "Flip Horizontal": "flip_h",
+                        "Flip Vertical": "flip_v"
+                    }
+                    
+                    if st.button("Apply Transform", key="apply_transform"):
+                        with st.spinner(f"Applying {transform_op}..."):
+                            modified_layer = transform_layer(
+                                color_layers[layer_idx],
+                                operation=transform_map[transform_op],
+                                bg_color=bg_color_rgb
+                            )
+                            st.session_state.custom_layers.append({
+                                'layer': modified_layer,
+                                'description': f"Transformed Layer {layer_idx+1} ({transform_op})"
+                            })
+                            st.success(f"Transform {transform_op} applied successfully!")
+                
+                # Effects (blur, sharpen, opacity)
+                with manipulation_tabs[3]:
+                    effect_subtabs = st.tabs(["Blur/Sharpen", "Opacity"])
+                    
+                    with effect_subtabs[0]:
+                        effect_op = st.radio("Effect", ["Blur", "Sharpen"], key="effect_op")
+                        effect_amount = st.slider("Amount", 1, 15, 5, key="effect_amount")
+                        
+                        if st.button("Apply Effect", key="apply_effect"):
+                            with st.spinner(f"Applying {effect_op}..."):
+                                modified_layer = apply_blur_sharpen(
+                                    color_layers[layer_idx],
+                                    operation=effect_op.lower(),
+                                    amount=effect_amount,
+                                    bg_color=bg_color_rgb
+                                )
+                                st.session_state.custom_layers.append({
+                                    'layer': modified_layer,
+                                    'description': f"{effect_op}ed Layer {layer_idx+1} (amount: {effect_amount})"
+                                })
+                                st.success(f"{effect_op} effect applied successfully!")
+                    
+                    with effect_subtabs[1]:
+                        opacity = st.slider("Opacity", 0.0, 1.0, 0.5, 0.05, key="opacity_slider")
+                        
+                        if st.button("Apply Opacity", key="apply_opacity"):
+                            with st.spinner("Adjusting opacity..."):
+                                modified_layer = adjust_layer_opacity(
+                                    color_layers[layer_idx],
+                                    opacity=opacity,
+                                    bg_color=bg_color_rgb
+                                )
+                                st.session_state.custom_layers.append({
+                                    'layer': modified_layer,
+                                    'description': f"Layer {layer_idx+1} with {int(opacity*100)}% opacity"
+                                })
+                                st.success("Opacity adjusted successfully!")
+                
+                # Initialize session state for custom layers if not already present
+                if 'custom_layers' not in st.session_state:
+                    st.session_state.custom_layers = []
+                
+                # Show instruction for finding manipulated layers
+                if len(st.session_state.custom_layers) > 0:
+                    st.info("👇 Your manipulated layers are available in the 'Manipulated Layers Gallery' section below")
+            else:
+                st.warning("No layers available to manipulate. Please create color layers first.")
+        
         # Add a section to show custom manipulated layers
         if 'custom_layers' in st.session_state and len(st.session_state.custom_layers) > 0:
             st.markdown("""
